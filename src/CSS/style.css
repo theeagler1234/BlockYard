@@ -72,3 +72,4 @@ li button.on .hint{color:inherit}
 #playlog{max-height:140px;overflow:auto;padding:8px 14px;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;background:var(--panel);border-top:1px solid var(--line);white-space:pre-wrap}
 #playlog:empty{display:none}
 #playlog .err{color:#c0261d}#playlog .wrn{color:#b45309}
+#props .inline{margin:8px 0}
