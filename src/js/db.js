@@ -32,3 +32,10 @@ export const createProject = (name, scene = null, files = {}, extra = {}) => {
 };
 export const deleteProject = id =>
   run(['projects', 'files'], 'readwrite', (ps, fs) => { fs.delete(IDBKeyRange.bound(id + '/', id + '0')); return ps.delete(id); });
+
+const range = pid => IDBKeyRange.bound(pid + '/', pid + '0');
+export const listFilePaths = pid =>
+  run(['files'], 'readonly', f => f.getAllKeys(range(pid))).then(ks => ks.map(k => k.slice(pid.length + 1)).sort());
+export const getFile = (pid, path) => run(['files'], 'readonly', f => f.get(`${pid}/${path}`)).then(r => r && r.blob);
+export const putFile = (pid, path, blob) => run(['files'], 'readwrite', f => f.put({ k: `${pid}/${path}`, blob }));
+export const deleteFile = (pid, path) => run(['files'], 'readwrite', f => f.delete(`${pid}/${path}`));
