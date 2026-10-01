@@ -21,8 +21,8 @@
   <button id="back" title="Save and go back to all projects">← Projects</button>
   <strong id="pname"></strong><span id="saved" class="hint"></span>
   <nav aria-label="Workspaces">
-    <button class="tab on">Scene</button>
-    <button class="tab" disabled title="Coming in step 2">Code</button>
+    <button class="tab on" data-tab="scene">Scene</button>
+    <button class="tab" data-tab="code">Code</button>
     <button class="tab" disabled title="Coming in step 3">Model maker</button>
     <button class="tab" disabled title="Coming in step 4">Publish</button>
   </nav>
@@ -58,6 +58,19 @@
     <p class="hint" id="none">Click something in the scene to edit it.</p>
   </aside>
 </main>
+<section id="code" hidden>
+  <aside id="files">
+    <div class="row wrap">
+      <button id="newfile">New file</button>
+      <button id="delfile">Delete</button>
+      <button id="copilot" class="primary" title="Opens VS Code for the Web, where GitHub Copilot works">Use Copilot</button>
+    </div>
+    <ul id="tree"></ul>
+    <p class="hint" id="ide-note"></p>
+    <p class="hint">This editor uses VS Code's engine. Copilot itself runs in VS Code for the Web, which the button opens.</p>
+  </aside>
+  <div id="monaco"></div>
+</section>
 </div>
 <script type="module" src="src/app.js"></script>
 </body>
