@@ -41,7 +41,7 @@ function open(project) {
   $('pname').textContent = project.name;
   $('saved').textContent = '';
   showTab('scene');
-  loadScene(project.scene, autosave);
+  loadScene(project.scene, autosave, project);
 }
 
 async function showHome() {
