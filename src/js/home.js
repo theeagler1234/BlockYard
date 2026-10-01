@@ -1,6 +1,8 @@
 import { listProjects, createProject, deleteProject } from './db.js';
 import { zipToProject, githubToProject } from './importers.js';
 
+const STARTER = `// Welcome! This file is your game's code.\n// Edit it here. Your changes save on their own.\n`;
+
 export async function renderHome(root, open) {
   root.innerHTML = `<div class="wrapper">
     <h1>Blockyard</h1>
@@ -30,7 +32,7 @@ export async function renderHome(root, open) {
 
   $('#f-new').onsubmit = e => {
     e.preventDefault();
-    work(async () => open(await createProject(new FormData(e.target).get('name').trim() || 'Untitled game')));
+    work(async () => open(await createProject(new FormData(e.target).get('name').trim() || 'Untitled game', null, { 'game.js': new Blob([STARTER]) })));
   };
   const takeZip = f => f && work(async () => { say('Reading your zip…'); await imported(await zipToProject(f)); });
   $('#zip').onchange = e => takeZip(e.target.files[0]);
