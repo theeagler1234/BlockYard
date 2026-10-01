@@ -100,6 +100,21 @@ const shapes = {
   Floor: () => new THREE.BoxGeometry(6, 0.2, 6),
 };
 
+function materialsOf(root) {
+  const out = [];
+  root.traverse(o => { if (o.material) out.push(...[].concat(o.material)); });
+  return out;
+}
+function disposeAll(root) {
+  root.traverse(o => {
+    o.geometry?.dispose();
+    for (const m of [].concat(o.material || [])) {
+      for (const v of Object.values(m)) if (v && v.isTexture) v.dispose();
+      m.dispose();
+    }
+  });
+}
+
 class Thing {
   constructor(mesh) {
     this.mesh = mesh;
@@ -108,9 +123,11 @@ class Thing {
     this.velocity = { x: 0, y: 0, z: 0 };   // units per second; only used when falls is true
     this.hit = noHits();      // which faces touched something last frame: the thing hit, or null
     this.onHit = null;        // optional: (face, otherThing) => { ... } when a face first touches
-    // Assumes the shape is centered on its position, which is true for all built-in shapes.
-    mesh.geometry.computeBoundingBox();
-    const size = mesh.geometry.boundingBox.getSize(new THREE.Vector3());
+    // Assumes the shape is centered on its position. That is true for the built-in shapes, and imported
+    // models are re-centered when they are loaded. (Done before scale and rotation are applied.)
+    let size;
+    if (mesh.geometry) { mesh.geometry.computeBoundingBox(); size = mesh.geometry.boundingBox.getSize(new THREE.Vector3()); }
+    else size = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3());
     this._size = { x: size.x, y: size.y, z: size.z };
   }
   get name() { return this.mesh.name; }
@@ -118,16 +135,16 @@ class Thing {
   get position() { return this.mesh.position; }
   get rotation() { return this.mesh.rotation; } // in radians
   get scale() { return this.mesh.scale; }
-  get color() { return '#' + this.mesh.material.color.getHexString(); }
-  set color(v) { this.mesh.material.color.set(v); }
+  // Imported models can have many materials. Reading gives the first one; setting tints all of them.
+  get color() { const m = materialsOf(this.mesh)[0]; return m?.color ? '#' + m.color.getHexString() : '#ffffff'; }
+  set color(v) { for (const m of materialsOf(this.mesh)) m.color?.set(v); }
   get visible() { return this.mesh.visible; }
   set visible(v) { this.mesh.visible = !!v; }
   move(x = 0, y = 0, z = 0) { this.mesh.position.x += x; this.mesh.position.y += y; this.mesh.position.z += z; return this; }
   rotate(x = 0, y = 0, z = 0) { this.mesh.rotation.x += x; this.mesh.rotation.y += y; this.mesh.rotation.z += z; return this; }
   remove() {
     scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    this.mesh.material.dispose();
+    disposeAll(this.mesh);
     const i = things.indexOf(this);
     if (i >= 0) things.splice(i, 1);
   }
@@ -136,7 +153,9 @@ class Thing {
 const things = [];
 function makeThing(type, o = {}) {
   if (!shapes[type]) throw new Error(`Unknown shape "${type}". Try: ${Object.keys(shapes).join(', ')}.`);
-  const mesh = new THREE.Mesh(shapes[type](), new THREE.MeshStandardMaterial({ color: o.color ?? 0x3b82f6 }));
+  return register(new THREE.Mesh(shapes[type](), new THREE.MeshStandardMaterial({ color: o.color ?? 0x3b82f6 })), type, o);
+}
+function register(mesh, type, o) {
   mesh.name = o.name ?? type;
   mesh.position.set(o.x ?? 0, o.y ?? 0, o.z ?? 0);
   scene.add(mesh);
@@ -146,8 +165,43 @@ function makeThing(type, o = {}) {
   things.push(t);
   return t;
 }
+
+// --- Imported models (.glb / .gltf / .obj) ---
+// Model files live in the editor, so ask it for them. The reader code is only loaded when the scene
+// actually has models, so games without models do not download it.
+const modelFiles = new Map();
+let modelReader = null;
+if ((data.scene || []).some(s => s.file)) {
+  try {
+    const answer = new Promise((res, rej) => {
+      const timer = setTimeout(() => rej(new Error('the editor did not send the model files')), 15000);
+      addEventListener('message', function on(e) {
+        if (e.source !== parent || !e.data?.blockyard || e.data.type !== 'models') return;
+        removeEventListener('message', on);
+        clearTimeout(timer);
+        res(e.data.files || {});
+      });
+    });
+    post('need-models');
+    for (const [path, blob] of Object.entries(await answer)) modelFiles.set(path, blob);
+    modelReader = await import(URL.createObjectURL(new Blob([data.loaderSource], { type: 'text/javascript' })));
+  } catch (e) { fail(`Models could not be loaded: ${e.message || e}`); }
+}
+
 for (const s of data.scene || []) {
-  const t = makeThing(s.type, { name: s.name, color: s.color, collisions: s.collide !== false });
+  let t;
+  if (s.file) {
+    try {
+      if (!modelReader) throw new Error('the model reader did not start');
+      const m = await modelReader.loadModel(s.file, modelFiles);
+      m.warnings.forEach(w => console.warn(`${s.file}: ${w}`));
+      t = register(m.object, 'Model', { name: s.name, collisions: s.collide !== false });
+    } catch (e) {
+      fail(`Could not load model "${s.file}": ${e.message || e}`);
+      // A red box stands in, so game.find('${s.name}') still works and your code does not crash.
+      t = makeThing('Cube', { name: s.name, color: 0xe11d48, collisions: s.collide !== false });
+    }
+  } else t = makeThing(s.type, { name: s.name, color: s.color, collisions: s.collide !== false });
   t.mesh.position.fromArray(s.pos);
   t.mesh.rotation.set(...s.rot);
   t.mesh.scale.fromArray(s.scale);
@@ -181,14 +235,25 @@ window.game = game;
 
 // --- Run physics for one frame ---
 const worldBox = new THREE.Box3();
+// True when position, rotation or scale differ from the last time this was asked (always true the first time).
+function poseChanged(t) {
+  const m = t.mesh, p = (t._pose ??= new Float64Array(9).fill(NaN));
+  const a = m.position, r = m.rotation, c = m.scale;
+  if (a.x === p[0] && a.y === p[1] && a.z === p[2] && r.x === p[3] && r.y === p[4] && r.z === p[5]
+    && c.x === p[6] && c.y === p[7] && c.z === p[8]) return false;
+  p[0] = a.x; p[1] = a.y; p[2] = a.z; p[3] = r.x; p[4] = r.y; p[5] = r.z; p[6] = c.x; p[7] = c.y; p[8] = c.z;
+  return true;
+}
 function stepPhysics(dt) {
   const solids = [];
   for (const t of things) {
     if (t.falls || !t.collisions) continue;
     const s = (t._solid ??= { box: { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } }, ref: t });
-    worldBox.setFromObject(t.mesh);   // includes rotation, so a turned thing gets a looser box
-    s.box.min.x = worldBox.min.x; s.box.min.y = worldBox.min.y; s.box.min.z = worldBox.min.z;
-    s.box.max.x = worldBox.max.x; s.box.max.y = worldBox.max.y; s.box.max.z = worldBox.max.z;
+    if (poseChanged(t)) {   // only re-measure when it moved: a model can have hundreds of parts to walk through
+      worldBox.setFromObject(t.mesh);   // includes rotation, so a turned thing gets a looser box
+      s.box.min.x = worldBox.min.x; s.box.min.y = worldBox.min.y; s.box.min.z = worldBox.min.z;
+      s.box.max.x = worldBox.max.x; s.box.max.y = worldBox.max.y; s.box.max.z = worldBox.max.z;
+    }
     solids.push(s);
   }
   for (const t of things) {
