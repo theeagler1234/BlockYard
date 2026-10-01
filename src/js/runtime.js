@@ -45,6 +45,51 @@ const resize = () => {
 addEventListener('resize', resize);
 resize();
 
+// --- Simple physics ---
+// Anchored things (the world) never move. A thing with falls = true gets gravity and stops at the
+// faces of anchored things that have collisions on. Falling things don't hit each other.
+// The math below uses plain numbers only, so it can be tested without three.js.
+// <physics-core>
+const EPS = 1e-4;
+// [face hit when moving in the negative direction, face hit when moving in the positive direction]
+// Forward is -z (the way the starting camera looks), right is +x, up is +y.
+const FACES = { x: ['left', 'right'], y: ['down', 'up'], z: ['forward', 'back'] };
+function noHits() { return { up: null, down: null, left: null, right: null, forward: null, back: null }; }
+
+function overlaps(b, o) {
+  return b.pos.x - b.half.x < o.max.x - EPS && b.pos.x + b.half.x > o.min.x + EPS
+    && b.pos.y - b.half.y < o.max.y - EPS && b.pos.y + b.half.y > o.min.y + EPS
+    && b.pos.z - b.half.z < o.max.z - EPS && b.pos.z + b.half.z > o.min.z + EPS;
+}
+
+// Moves one body (pos = center, half = half-size, vel = velocity) by dt seconds.
+// Returns which faces of the body hit something: { up, down, left, right, forward, back }.
+function stepBody(b, solids, gravity, dt) {
+  b.vel.y = Math.max(b.vel.y + gravity * dt, -60);
+  const hit = noHits();
+  // Small steps (never more than half the body's size) so fast things can't skip through thin walls.
+  const fastest = Math.max(Math.abs(b.vel.x), Math.abs(b.vel.y), Math.abs(b.vel.z)) * dt;
+  const smallest = Math.max(Math.min(b.half.x, b.half.y, b.half.z), 0.05);
+  const steps = Math.min(40, Math.max(1, Math.ceil(fastest / smallest)));
+  const h = dt / steps;
+  for (let i = 0; i < steps; i++) {
+    for (const axis of ['y', 'x', 'z']) {   // up/down first, so landing wins over sliding
+      const d = b.vel[axis] * h;
+      if (d === 0) continue;
+      b.pos[axis] += d;
+      for (const s of solids) {
+        if (!overlaps(b, s.box)) continue;
+        const [neg, pos] = FACES[axis];
+        if (d > 0) { b.pos[axis] = s.box.min[axis] - b.half[axis]; hit[pos] = s.ref; }
+        else { b.pos[axis] = s.box.max[axis] + b.half[axis]; hit[neg] = s.ref; }
+        b.vel[axis] = 0;
+      }
+    }
+  }
+  return hit;
+}
+// </physics-core>
+
 // --- Things: the beginner-friendly wrapper around a mesh ---
 // Keep these shapes in sync with src/js/main.js.
 const shapes = {
@@ -56,7 +101,18 @@ const shapes = {
 };
 
 class Thing {
-  constructor(mesh) { this.mesh = mesh; }
+  constructor(mesh) {
+    this.mesh = mesh;
+    this.collisions = true;   // false = things pass through this one (and it passes through them)
+    this.falls = false;       // true = gravity pulls it down and it lands on solid things
+    this.velocity = { x: 0, y: 0, z: 0 };   // units per second; only used when falls is true
+    this.hit = noHits();      // which faces touched something last frame: the thing hit, or null
+    this.onHit = null;        // optional: (face, otherThing) => { ... } when a face first touches
+    // Assumes the shape is centered on its position, which is true for all built-in shapes.
+    mesh.geometry.computeBoundingBox();
+    const size = mesh.geometry.boundingBox.getSize(new THREE.Vector3());
+    this._size = { x: size.x, y: size.y, z: size.z };
+  }
   get name() { return this.mesh.name; }
   set name(v) { this.mesh.name = v; }
   get position() { return this.mesh.position; }
@@ -85,11 +141,13 @@ function makeThing(type, o = {}) {
   mesh.position.set(o.x ?? 0, o.y ?? 0, o.z ?? 0);
   scene.add(mesh);
   const t = new Thing(mesh);
+  t.collisions = o.collisions ?? true;
+  t.falls = o.falls ?? false;
   things.push(t);
   return t;
 }
 for (const s of data.scene || []) {
-  const t = makeThing(s.type, { name: s.name, color: s.color });
+  const t = makeThing(s.type, { name: s.name, color: s.color, collisions: s.collide !== false });
   t.mesh.position.fromArray(s.pos);
   t.mesh.rotation.set(...s.rot);
   t.mesh.scale.fromArray(s.scale);
@@ -112,6 +170,7 @@ addEventListener('blur', () => held.clear());
 const game = {
   THREE, scene, camera, renderer,
   orbit: true,   // set to false to stop the mouse from moving the camera
+  physics: { gravity: -20 },   // units per second squared. 0 turns gravity off.
   time: 0,       // seconds since the game started
   things,
   find: name => things.find(t => t.name === name) ?? null,
@@ -119,6 +178,39 @@ const game = {
   keys: { down: k => held.has(norm(k)), pressed: k => tapped.has(norm(k)) },
 };
 window.game = game;
+
+// --- Run physics for one frame ---
+const worldBox = new THREE.Box3();
+function stepPhysics(dt) {
+  const solids = [];
+  for (const t of things) {
+    if (t.falls || !t.collisions) continue;
+    const s = (t._solid ??= { box: { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } }, ref: t });
+    worldBox.setFromObject(t.mesh);   // includes rotation, so a turned thing gets a looser box
+    s.box.min.x = worldBox.min.x; s.box.min.y = worldBox.min.y; s.box.min.z = worldBox.min.z;
+    s.box.max.x = worldBox.max.x; s.box.max.y = worldBox.max.y; s.box.max.z = worldBox.max.z;
+    solids.push(s);
+  }
+  for (const t of things) {
+    if (!t.falls) continue;
+    const m = t.mesh, sc = m.scale;
+    // A falling thing's own rotation is ignored, so spinning it doesn't change how it collides.
+    const b = (t._body ??= { pos: { x: 0, y: 0, z: 0 }, half: { x: 0, y: 0, z: 0 }, vel: t.velocity });
+    b.vel = t.velocity;
+    b.pos.x = m.position.x; b.pos.y = m.position.y; b.pos.z = m.position.z;
+    b.half.x = Math.abs(t._size.x * sc.x) / 2; b.half.y = Math.abs(t._size.y * sc.y) / 2; b.half.z = Math.abs(t._size.z * sc.z) / 2;
+    const hit = stepBody(b, t.collisions ? solids : [], game.physics.gravity, dt);
+    m.position.set(b.pos.x, b.pos.y, b.pos.z);
+    const fresh = Object.keys(hit).filter(face => hit[face] && !t.hit[face]);
+    Object.assign(t.hit, hit);
+    for (const face of fresh) {
+      try { t.onHit?.(face, hit[face]); } catch (e) {
+        fail(`onHit stopped because of an error: ${e.message}`);
+        t.onHit = null;
+      }
+    }
+  }
+}
 
 // --- Load the project's code ---
 // Files can import each other with relative paths. We rewrite those imports to blob URLs.
@@ -169,6 +261,7 @@ renderer.setAnimationLoop(() => {
       update = null;
     }
   }
+  stepPhysics(dt);
   controls.enabled = game.orbit;
   if (game.orbit) controls.update();
   renderer.render(scene, camera);
