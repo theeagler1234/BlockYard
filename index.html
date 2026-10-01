@@ -6,7 +6,7 @@
 <title>Blockyard – make 3D games in your browser</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="src/CSS/style.css">
 <script type="importmap">
 {"imports":{
   "fflate":"https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js",
@@ -23,6 +23,7 @@
   <nav aria-label="Workspaces">
     <button class="tab on" data-tab="scene">Scene</button>
     <button class="tab" data-tab="code">Code</button>
+    <button class="tab" data-tab="play">▶ Play</button>
     <button class="tab" disabled title="Coming in step 3">Model maker</button>
     <button class="tab" disabled title="Coming in step 4">Publish</button>
   </nav>
@@ -71,7 +72,16 @@
   </aside>
   <div id="monaco"></div>
 </section>
+<section id="play" hidden>
+  <div class="playbar">
+    <button id="restart" class="primary" title="Run your game again with your latest code">Restart</button>
+    <label class="inline"><input type="checkbox" id="potato"> Potato mode</label>
+    <span class="hint">Click the game, then use your keyboard. Changed your code? Press Restart.</span>
+  </div>
+  <div id="playwrap"></div>
+  <div id="playlog" aria-live="polite"></div>
+</section>
 </div>
-<script type="module" src="src/app.js"></script>
+<script type="module" src="src/js/app.js"></script>
 </body>
 </html>

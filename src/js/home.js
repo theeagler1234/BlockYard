@@ -1,7 +1,23 @@
 import { listProjects, createProject, deleteProject } from './db.js';
 import { zipToProject, githubToProject } from './importers.js';
 
-const STARTER = `// Welcome! This file is your game's code.\n// Edit it here. Your changes save on their own.\n`;
+const STARTER = `// Welcome! This file is your game's code. Open the Play tab to run it.
+// Your changes save on their own.
+
+// start() runs once, when the game begins.
+export function start(game) {
+  console.log('Hello from my game!');
+}
+
+// update() runs every frame. "seconds" is how long the last frame took.
+export function update(seconds, game) {
+  const cube = game.find('Cube 1');
+  if (!cube) return;
+  cube.rotate(0, seconds, 0); // spin
+  if (game.keys.down('left')) cube.move(-3 * seconds, 0, 0);
+  if (game.keys.down('right')) cube.move(3 * seconds, 0, 0);
+}
+`;
 
 export async function renderHome(root, open) {
   root.innerHTML = `<div class="wrapper">
