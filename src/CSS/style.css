@@ -73,3 +73,6 @@ li button.on .hint{color:inherit}
 #playlog:empty{display:none}
 #playlog .err{color:#c0261d}#playlog .wrn{color:#b45309}
 #props .inline{margin:8px 0}
+#models{margin-top:8px}
+#notice:empty{display:none}
+#notice.bad{color:#c0261d}
