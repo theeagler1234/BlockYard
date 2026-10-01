@@ -57,6 +57,7 @@ function addShape(type, s) {
   counts[type] = (counts[type] || 0) + 1;
   const mesh = new THREE.Mesh(shapes[type](), new THREE.MeshStandardMaterial({ color: s ? s.color : 0x3b82f6 }));
   mesh.userData.type = type;
+  mesh.userData.collide = s ? s.collide !== false : true;
   mesh.name = s ? s.name : `${type} ${counts[type]}`;
   if (s) {
     mesh.position.fromArray(s.pos);
@@ -96,9 +97,11 @@ function syncProps() {
   $('p-name').value = selected.name;
   ['x', 'y', 'z'].forEach(a => ($('p-' + a).value = +selected.position[a].toFixed(2)));
   $('p-color').value = '#' + selected.material.color.getHexString();
+  $('p-collide').checked = selected.userData.collide !== false;
 }
 $('p-name').oninput = e => { if (selected) { selected.name = e.target.value; renderList(); changed(); } };
 ['x', 'y', 'z'].forEach(a => ($('p-' + a).oninput = e => { if (selected) { selected.position[a] = +e.target.value || 0; changed(); } }));
+$('p-collide').onchange = e => { if (selected) { selected.userData.collide = e.target.checked; changed(); } };
 $('p-color').oninput = e => { if (selected) { selected.material.color.set(e.target.value); changed(); } };
 
 function remove() {
@@ -146,7 +149,7 @@ export function getState() {
   return objects.map(o => ({
     type: o.userData.type, name: o.name, pos: o.position.toArray(),
     rot: [o.rotation.x, o.rotation.y, o.rotation.z], scale: o.scale.toArray(),
-    color: o.material.color.getHex(),
+    color: o.material.color.getHex(), collide: o.userData.collide !== false,
   }));
 }
 const starter = [
