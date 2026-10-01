@@ -32,6 +32,13 @@
   <aside id="left">
     <h2>Add to scene</h2>
     <div class="row wrap" id="adders"></div>
+    <h2>3D models</h2>
+    <button id="import-model" title="Pick a .glb, .gltf or .obj file. You can also drop files onto the scene.">Import model…</button>
+    <input type="file" id="model-file" multiple hidden aria-label="Choose model files"
+      accept=".glb,.gltf,.obj,.mtl,.bin,.png,.jpg,.jpeg,.webp,.gif,.bmp,.zip">
+    <p class="hint">.glb is easiest. If your model has extra files (.bin, .mtl, pictures), pick them all together or use a .zip.</p>
+    <ul id="models"></ul>
+    <p class="hint" id="notice" role="status"></p>
     <h2>Things in your scene</h2>
     <ul id="list"></ul>
     <p class="hint" id="empty">Your scene is empty. Add a shape above to get started.</p>
