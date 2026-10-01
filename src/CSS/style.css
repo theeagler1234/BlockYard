@@ -55,3 +55,10 @@ details{font-size:13px}summary{cursor:pointer;margin-bottom:6px}
 .proj{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .proj .info{flex:1;min-width:0}.proj b{display:block;overflow:hidden;text-overflow:ellipsis}
 .warn{color:#b45309;font-size:13px}
+
+#code{flex:1;display:grid;grid-template-columns:260px 1fr;min-height:0}
+#files{border-right:1px solid var(--line)}
+#files .row{margin:12px 0}
+#monaco{min-width:0;min-height:0}
+li button.on .hint{color:inherit}
+@media (max-width:760px){#code{grid-template-columns:1fr;grid-template-rows:auto 60vh}}
