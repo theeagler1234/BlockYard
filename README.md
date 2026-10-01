@@ -15,7 +15,7 @@ Then open http://localhost:8000
 ## Roadmap
 1. Scene editor (done): shapes, move/rotate/scale, properties
 2. Code editor (done) and Play tab (done)
-3. Simple physics (done: gravity and solid faces), then model maker + .obj/.gltf import
+3. Simple physics (done: gravity and solid faces), .obj/.gltf/.glb import (done), then model maker
 4. One-click publish helper
 
 ## Writing game code
@@ -51,6 +51,23 @@ Files can import each other with relative paths (`import { x } from './scripts/p
 Games run inside a sandboxed frame, so they can't touch your saved projects. Turn on **Potato mode**
 in the Play tab to render at a lower resolution without antialiasing.
 
+## 3D models
+
+In the Scene tab, press **Import model…** (or drop files onto the scene) to bring in a `.glb`, `.gltf` or `.obj`.
+
+- **.glb** is a single file and the easiest. 
+- A **.gltf** usually comes with a `.bin` file and pictures, and an **.obj** with a `.mtl` file and pictures.
+  Pick them all in the same dialog, or put them in a `.zip` and pick that.
+  If something is missing, Blockyard tells you which file it was looking for.
+- Files are stored in your project under `models/`. Models already inside a zip or GitHub project show up in the
+  list too, so you can add them to the scene.
+- A newly added model is scaled to about 2 units wide and set on the floor, whatever size it was made at. Use the
+  Scale tool after that.
+- In game code a model is a normal thing: `game.find('crate 1')` and then `move`, `rotate`, `scale`, `falls`, `hit`.
+  `thing.color = '#ff0000'` tints every part of it. Models are not created by `game.add(...)` yet; place them in the Scene tab.
+- Models are static: animations are not played yet. Draco, KTX2 and Meshopt compression are not supported yet, so
+  export without them. Big models are slow on old computers, so Blockyard warns above 50,000 triangles.
+
 ## Projects
 Projects live in your browser (IndexedDB). You can start fresh, upload a .zip, or copy a public GitHub repo
 (Git LFS files are fetched automatically). Private repos need a personal access token.
@@ -63,7 +80,7 @@ Deliberately small, so it runs on a potato:
   don't mark `falls` is part of the world, and `thing.collisions` decides whether it is solid.
 - **Only things with `falls = true` move.** They get gravity, land on solid things, and stop
   at walls and ceilings. Falling things don't collide with each other.
-- **Collisions use boxes.** Every shape is treated as its bounding box, so a sphere or cone acts
+- **Collisions use boxes.** Every shape is treated as its bounding box, so a sphere, cone or imported model acts
   like a box. Rotated world pieces get a looser box. A falling thing ignores its own rotation.
 - **Directions:** forward is -z (the way the starting camera looks), right is +x, up is +y.
 - **Moving things by hand:** `move()` and setting `position` teleport and skip collisions. Use
