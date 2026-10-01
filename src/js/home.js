@@ -6,16 +6,19 @@ const STARTER = `// Welcome! This file is your game's code. Open the Play tab to
 
 // start() runs once, when the game begins.
 export function start(game) {
-  console.log('Hello from my game!');
+  const cube = game.find('Cube 1');
+  if (cube) cube.falls = true; // gravity on: it drops and lands on anything with collisions on
 }
 
 // update() runs every frame. "seconds" is how long the last frame took.
 export function update(seconds, game) {
   const cube = game.find('Cube 1');
   if (!cube) return;
+  const keys = game.keys;
   cube.rotate(0, seconds, 0); // spin
-  if (game.keys.down('left')) cube.move(-3 * seconds, 0, 0);
-  if (game.keys.down('right')) cube.move(3 * seconds, 0, 0);
+  cube.velocity.x = ((keys.down('right') ? 1 : 0) - (keys.down('left') ? 1 : 0)) * 4;
+  cube.velocity.z = ((keys.down('down') ? 1 : 0) - (keys.down('up') ? 1 : 0)) * 4;
+  if (cube.hit.down && keys.pressed('space')) cube.velocity.y = 9; // jump, only when standing on something
 }
 `;
 
