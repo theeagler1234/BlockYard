@@ -1,13 +1,15 @@
 // The Play tab: runs the project's game.js in a sandboxed iframe.
 // The sandbox means player code can't touch your saved projects or the editor.
 import { listFilePaths, getFile } from './db.js';
+import { collectModelFiles } from './modelImport.js';
 
 const $ = id => document.getElementById(id);
 const CODE = /\.m?js$/i;
 const MAX_BYTES = 2_000_000;
 const MAX_LINES = 200;
 
-let frame = null, runtime = null, project = null, getScene = null;
+let frame = null, runtime = null, loaderSource = null, project = null, getScene = null;
+let modelBlobs = {};   // { path: Blob } for the models in the scene, handed to the game when it asks
 
 // "\u003c" keeps the browser from ending our <script> blocks early.
 const safe = s => s.replace(/</g, '\\u003c');
@@ -19,6 +21,16 @@ async function loadRuntime() {
     runtime = await r.text();
   }
   return runtime;
+}
+
+// Model files live in the editor's storage, which the sandboxed game cannot reach, so the game asks for them.
+async function loadLoaderSource() {
+  if (!loaderSource) {
+    const r = await fetch(new URL('./modelLoader.js', import.meta.url));
+    if (!r.ok) throw new Error('Could not load the model reader. Check your connection and try again.');
+    loaderSource = await r.text();
+  }
+  return loaderSource;
 }
 
 function log(level, text) {
@@ -35,6 +47,7 @@ function log(level, text) {
 addEventListener('message', e => {
   if (!frame || e.source !== frame.contentWindow || !e.data?.blockyard) return;
   if (e.data.type === 'log') log(e.data.level, e.data.text);
+  if (e.data.type === 'need-models') frame.contentWindow.postMessage({ blockyard: true, type: 'models', files: modelBlobs }, '*');
 });
 
 export function stopPlay() {
@@ -52,7 +65,10 @@ async function run() {
       if (blob && blob.size <= MAX_BYTES) files[p] = await blob.text();
     }
     const map = document.querySelector('script[type=importmap]').textContent;
-    const data = { files, scene: getScene(), potato: $('potato').checked };
+    const scene = getScene();
+    const hasModels = scene.some(s => s.file);
+    modelBlobs = hasModels ? await collectModelFiles(project.id, scene) : {};
+    const data = { files, scene, potato: $('potato').checked, loaderSource: hasModels ? await loadLoaderSource() : null };
     const html = `<!doctype html><html><head><meta charset="utf-8">
 <style>html,body{margin:0;height:100%;overflow:hidden;background:#dfe6ee}canvas{display:block}</style>
 <script type="importmap">${map}</script></head><body>
